@@ -4,7 +4,6 @@ import App from './App';
 
 // Claude Artifact の window.storage を模倣するローカル版
 if (!window.storage) {
-  const store = {};
   window.storage = {
     get: async (key) => {
       const val = localStorage.getItem(key);

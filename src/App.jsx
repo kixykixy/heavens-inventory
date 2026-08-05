@@ -417,22 +417,21 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: "#f1f5f9", fontFamily: "'Inter','Segoe UI',sans-serif", color: "#1a2332" }}>
       <div style={{ background: "#1a2332", padding: "0 12px", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 2px 12px rgba(0,0,0,0.2)" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", height: 60 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ background: "#f59e0b", width: 32, height: 32, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>📦</div>
-            <div>
-              <div style={{ color: "#fff", fontWeight: 700, fontSize: 16 }}>ヘブンズ在庫管理</div>
-              <div style={{ color: "#64748b", fontSize: 11 }}>INVENTORY MANAGER</div>
+        <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", height: 52 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+            <div style={{ background: "#f59e0b", width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>📦</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ color: "#fff", fontWeight: 700, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>ヘブンズ在庫管理</div>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 5, marginLeft: 8, background: "rgba(255,255,255,0.06)", borderRadius: 20, padding: "3px 10px" }}>
-              <div style={{ width: 7, height: 7, borderRadius: "50%", background: syncDot.color }} />
-              <span style={{ fontSize: 11, color: "#94a3b8" }}>{syncDot.label}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(255,255,255,0.06)", borderRadius: 20, padding: "2px 8px", flexShrink: 0 }}>
+              <div style={{ width: 6, height: 6, borderRadius: "50%", background: syncDot.color }} />
+              <span style={{ fontSize: 10, color: "#94a3b8", whiteSpace: "nowrap" }}>{syncDot.label}</span>
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <input ref={fileRef} type="file" accept=".csv" onChange={handleImport} style={{ display: "none" }} />
-            <button onClick={sendToGas} style={{ background: "#f59e0b", color: "#1a2332", border: "none", padding: "8px 18px", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>✅ 確定</button>
-            <button onClick={() => setModal({ type: "adminMenu" })} style={{ background: "rgba(255,255,255,0.08)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.15)", padding: "7px 14px", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>⚙️ 管理</button>
+            <button onClick={sendToGas} style={{ background: "#f59e0b", color: "#1a2332", border: "none", padding: "7px 14px", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>✅ 確定</button>
+            <button onClick={() => setModal({ type: "adminMenu" })} style={{ background: "rgba(255,255,255,0.08)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.15)", padding: "6px 12px", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>⚙️ 管理</button>
           </div>
         </div>
       </div>

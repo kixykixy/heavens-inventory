@@ -1,31 +1,100 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 
+const SUPABASE_URL = "https://aghubdcnpcrirngtpiyk.supabase.co";
+const SUPABASE_KEY = "sb_publishable_l6X67pDrXsxOGPNHCHDKjg_t96fdJ8-";
+const TABLE = "inventory_items";
+const PASSWORD = "muddy";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbz2ICyvGq1sgr1l6tHbLD8h6QylYBkn86fmGWspfs8pBGx03fQPfyDMRncthEVz-0BU/exec";
+
 const CATEGORIES = ["すべて", "ウイスキー", "スピリッツ", "リキュール", "ジュース", "ビール", "ワイン", "焼酎"];
 const LOCATIONS = ["", "１番", "1-2番", "２番", "３番", "４番", "4-5番", "５番", "バック"];
-const GAS_URL = "https://script.google.com/macros/s/AKfycbz2ICyvGq1sgr1l6tHbLD8h6QylYBkn86fmGWspfs8pBGx03fQPfyDMRncthEVz-0BU/exec";
-const STORAGE_KEY = "heavens-inventory-v1";
-const DISPLOG_KEY = "heavens-displog-v1";
-const ADJLOG_KEY = "heavens-adjlog-v1";
-const SNAPSHOT_KEY = "heavens-snapshot-v1";
-const PASSWORD = "muddy";
-let nextId = 1000;
 
 const STORES = [
-  { id: "heavens", name: "ヘブンズキッチン", color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe", icon: "🍽️" },
-  { id: "boost",   name: "ブースト",         color: "#0369a1", bg: "#f0f9ff", border: "#bae6fd", icon: "⚡" },
-  { id: "maddy",   name: "マディー",          color: "#be185d", bg: "#fdf2f8", border: "#fbcfe8", icon: "🌸" },
+  { id: "heavens", name: "ヘブンズキッチン", col: "heavens_out", color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe", icon: "🍽️" },
+  { id: "boost",   name: "ブースト",         col: "boost_out",   color: "#0369a1", bg: "#f0f9ff", border: "#bae6fd", icon: "⚡" },
+  { id: "maddy",   name: "マディー",          col: "muddy_out",   color: "#be185d", bg: "#fdf2f8", border: "#fbcfe8", icon: "🌸" },
 ];
 
+// Supabase API呼び出し
+async function sbFetch(path, options = {}) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...options,
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+      "Prefer": "return=representation",
+      ...options.headers,
+    },
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(err);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+// 全件取得
+async function fetchItems() {
+  return await sbFetch(`${TABLE}?select=*&order=id.asc`);
+}
+
+// 1件更新
+async function updateItem(id, data) {
+  return await sbFetch(`${TABLE}?id=eq.${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+// 1件追加
+async function insertItem(data) {
+  return await sbFetch(TABLE, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// 1件削除
+async function deleteItemDb(id) {
+  return await sbFetch(`${TABLE}?id=eq.${id}`, {
+    method: "DELETE",
+  });
+}
+
+// データ正規化
 function normalizeItem(i) {
   return {
-    id: Number(i.id) || nextId++,
-    name: String(i.name || "").trim(),
-    category: String(i.category || "").trim(),
-    location: String(i.location || "").trim(),
+    id: Number(i.id),
+    name: String(i.name || ""),
+    category: String(i.category || ""),
+    location: String(i.location || ""),
     stock: Number(i.stock) || 0,
-    minStock: Number(i.minStock) || 0,
-    unit: String(i.unit || "本").trim(),
-    price: Number(i.price) || 0,
+    minStock: Number(i.low_stock) || 0,
+    unit: String(i.unit || "本"),
+    price: Number(i.cost_price) || 0,
+    heavens_out: Number(i.heavens_out) || 0,
+    boost_out: Number(i.boost_out) || 0,
+    muddy_out: Number(i.muddy_out) || 0,
+    received: Number(i.received) || 0,
+  };
+}
+
+function toDbRow(item) {
+  return {
+    id: item.id,
+    name: item.name,
+    category: item.category,
+    location: item.location,
+    stock: item.stock,
+    low_stock: item.minStock,
+    unit: item.unit,
+    cost_price: item.price,
+    heavens_out: item.heavens_out || 0,
+    boost_out: item.boost_out || 0,
+    muddy_out: item.muddy_out || 0,
+    received: item.received || 0,
   };
 }
 
@@ -62,35 +131,29 @@ function parseCsv(text) {
     const cols = splitCsvLine(line).map(c => c.replace(/^"|"$/g, "").trim());
     const name = hMap.name !== undefined ? cols[hMap.name] : "";
     if (!name) { errors.push(`行 ${idx + 2}: 商品名が空です`); return; }
-    items.push(normalizeItem({
-      id: hMap.id !== undefined ? cols[hMap.id] : nextId++,
+    items.push({
+      id: hMap.id !== undefined ? Number(cols[hMap.id]) : Date.now(),
       name,
       category: hMap.category !== undefined ? cols[hMap.category] : "",
       location: hMap.location !== undefined ? cols[hMap.location] : "",
-      stock: hMap.stock !== undefined ? cols[hMap.stock] : 0,
-      minStock: hMap.minStock !== undefined ? cols[hMap.minStock] : 0,
-      unit: hMap.unit !== undefined ? cols[hMap.unit] : "本",
-      price: hMap.price !== undefined ? cols[hMap.price] : 0,
-    }));
+      stock: hMap.stock !== undefined ? Number(cols[hMap.stock]) || 0 : 0,
+      minStock: hMap.minStock !== undefined ? Number(cols[hMap.minStock]) || 0 : 0,
+      unit: hMap.unit !== undefined ? cols[hMap.unit] || "本" : "本",
+      price: hMap.price !== undefined ? Number(cols[hMap.price]) || 0 : 0,
+      heavens_out: 0, boost_out: 0, muddy_out: 0, received: 0,
+    });
   });
   return { items, errors };
 }
 
-function itemsToCsv(items, dispLog = []) {
+function itemsToCsv(items) {
   const esc = v => `"${String(v).replace(/"/g, '""')}"`;
-  const headers = ["商品名","カテゴリー","場所","在庫数","最低在庫数","単位","仕入れ価格","ヘブンズキッチン出庫","ブースト出庫","マディー出庫"];
+  const headers = ["商品名","カテゴリー","場所","在庫数","最低在庫数","単位","仕入れ価格","ヘブンズキッチン出庫","ブースト出庫","マディー出庫","入荷数"];
   const rows = [headers.join(",")];
   items.forEach(i => {
-    const h = dispLog.filter(d => d.itemId === i.id && d.store === "ヘブンズキッチン").reduce((s, d) => s + d.amount, 0);
-    const b = dispLog.filter(d => d.itemId === i.id && d.store === "ブースト").reduce((s, d) => s + d.amount, 0);
-    const m = dispLog.filter(d => d.itemId === i.id && d.store === "マディー").reduce((s, d) => s + d.amount, 0);
-    rows.push([i.name, i.category, i.location, i.stock, i.minStock, i.unit, i.price, h, b, m].map(esc).join(","));
+    rows.push([i.name, i.category, i.location, i.stock, i.minStock, i.unit, i.price, i.heavens_out||0, i.boost_out||0, i.muddy_out||0, i.received||0].map(esc).join(","));
   });
   return "\uFEFF" + rows.join("\r\n");
-}
-
-function buildGasRow(i, h, b, d, adjIn) {
-  return [i.id, i.name, i.location, i.category, i.stock, h, b, d, i.unit, i.price||0, adjIn, i.minStock].join("|");
 }
 
 function PasswordScreen({ onUnlock }) {
@@ -160,8 +223,6 @@ const inp = { width: "100%", padding: "10px 12px", border: "1.5px solid #e2e8f0"
 export default function App() {
   const [unlocked, setUnlocked] = useState(false);
   const [items, setItems] = useState([]);
-  const [dispLog, setDispLog] = useState([]);
-  const [adjLog, setAdjLog] = useState([]);
   const [selCat, setSelCat] = useState("すべて");
   const [q, setQ] = useState("");
   const [sortBy, setSortBy] = useState("name");
@@ -176,68 +237,25 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState("loading");
   const [lastSync, setLastSync] = useState(null);
   const fileRef = useRef(null);
-  const itemsRef = useRef(items);
-  itemsRef.current = items;
 
-  const saveItems = useCallback(async (newItems) => {
-    setSyncStatus("saving");
+  const loadItems = useCallback(async () => {
     try {
-      await window.storage.set(STORAGE_KEY, JSON.stringify(newItems), true);
+      setSyncStatus("loading");
+      const data = await fetchItems();
+      setItems(data.map(normalizeItem));
       setLastSync(new Date());
       setSyncStatus("synced");
-    } catch { setSyncStatus("error"); }
-  }, []);
-
-  const saveDispLogFn = useCallback(async (newLog) => {
-    try { await window.storage.set(DISPLOG_KEY, JSON.stringify(newLog), true); } catch {}
-  }, []);
-
-  const saveAdjLogFn = useCallback(async (newLog) => {
-    try { await window.storage.set(ADJLOG_KEY, JSON.stringify(newLog), true); } catch {}
-  }, []);
-
-  const updateItems = useCallback((newItems) => {
-    setItems(newItems);
-    saveItems(newItems);
-  }, [saveItems]);
-
-  const updateDispLog = useCallback((newLog) => {
-    setDispLog(newLog);
-    saveDispLogFn(newLog);
-  }, [saveDispLogFn]);
-
-  const updateAdjLog = useCallback((newLog) => {
-    setAdjLog(newLog);
-    saveAdjLogFn(newLog);
-  }, [saveAdjLogFn]);
-
-  useEffect(() => {
-    setSyncStatus("loading");
-    Promise.all([
-      window.storage.get(STORAGE_KEY, true).then(r => r ? JSON.parse(r.value) : null).catch(() => null),
-      window.storage.get(DISPLOG_KEY, true).then(r => r ? JSON.parse(r.value) : []).catch(() => []),
-      window.storage.get(ADJLOG_KEY, true).then(r => r ? JSON.parse(r.value) : []).catch(() => []),
-    ]).then(([savedItems, savedLog, savedAdjLog]) => {
-      if (savedItems && savedItems.length > 0) setItems(savedItems.map(normalizeItem));
-      if (savedLog) setDispLog(savedLog);
-      if (savedAdjLog) setAdjLog(savedAdjLog);
-      setSyncStatus("synced");
-      setLastSync(new Date());
-    });
+    } catch (e) {
+      console.error(e);
+      setSyncStatus("error");
+    }
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        const r = await window.storage.get(STORAGE_KEY, true);
-        if (r) {
-          const data = JSON.parse(r.value).map(normalizeItem);
-          if (JSON.stringify(data) !== JSON.stringify(itemsRef.current)) setItems(data);
-        }
-      } catch {}
-    }, 10000);
+    loadItems();
+    const interval = setInterval(loadItems, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [loadItems]);
 
   const lowStock = useMemo(() => items.filter(i => Number(i.stock) <= Number(i.minStock)), [items]);
 
@@ -266,29 +284,79 @@ export default function App() {
   const openAdd = () => { setForm({ name: "", category: "ウイスキー", location: "", stock: "", minStock: "", unit: "本", price: "" }); setModal({ type: "form" }); };
   const openEdit = (item) => { setForm({ ...item, stock: String(item.stock), minStock: String(item.minStock), price: String(item.price || "") }); setModal({ type: "form", item }); };
 
-  const saveItem = () => {
-    const n = normalizeItem({ ...form });
-    if (!n.name) return;
-    const newItems = modal.item ? items.map(i => i.id === modal.item.id ? { ...i, ...n } : i) : [...items, { ...n, id: nextId++ }];
-    updateItems(newItems);
-    setModal(null);
+  const saveItem = async () => {
+    const data = {
+      id: modal.item ? modal.item.id : Date.now(),
+      name: form.name,
+      category: form.category || "",
+      location: form.location || "",
+      stock: Number(form.stock) || 0,
+      minStock: Number(form.minStock) || 0,
+      unit: form.unit || "本",
+      price: Number(form.price) || 0,
+      heavens_out: modal.item ? modal.item.heavens_out : 0,
+      boost_out: modal.item ? modal.item.boost_out : 0,
+      muddy_out: modal.item ? modal.item.muddy_out : 0,
+      received: modal.item ? modal.item.received : 0,
+    };
+    if (!data.name) return;
+    try {
+      setSyncStatus("saving");
+      if (modal.item) {
+        await updateItem(data.id, toDbRow(data));
+      } else {
+        await insertItem(toDbRow(data));
+      }
+      await loadItems();
+      setModal(null);
+    } catch(e) { setSyncStatus("error"); console.error(e); }
   };
 
-  const deleteItem = (id) => updateItems(items.filter(i => i.id !== id));
+  const deleteItem = async (id) => {
+    try {
+      setSyncStatus("saving");
+      await deleteItemDb(id);
+      await loadItems();
+      setModal(null);
+    } catch(e) { setSyncStatus("error"); console.error(e); }
+  };
+
   const openAdj = (item) => { setAdjAmt(""); setAdjType("add"); setModal({ type: "adjust", item }); };
   const openDisp = (item, store) => { setDispAmt(""); setModal({ type: "dispatch", item, store }); };
 
-  const applyDisp = () => {
+  const applyDisp = async () => {
     const amt = parseInt(dispAmt);
     if (isNaN(amt) || amt <= 0) return;
     const actual = Math.min(amt, Number(modal.item.stock));
-    updateItems(items.map(i => i.id === modal.item.id ? { ...i, stock: Number(i.stock) - actual } : i));
-    const newLog = [{ itemId: modal.item.id, itemName: modal.item.name, store: modal.store.name, icon: modal.store.icon, amount: actual, unit: modal.item.unit, time: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) }, ...dispLog.slice(0, 199)];
-    updateDispLog(newLog);
-    setModal(null);
+    const item = modal.item;
+    const store = modal.store;
+    try {
+      setSyncStatus("saving");
+      await updateItem(item.id, {
+        stock: Number(item.stock) - actual,
+        [store.col]: Number(item[store.col] || 0) + actual,
+      });
+      await loadItems();
+      setModal(null);
+    } catch(e) { setSyncStatus("error"); console.error(e); }
   };
 
-  const handleExport = () => setModal({ type: "export", csv: itemsToCsv(items, dispLog) });
+  const applyAdj = async () => {
+    const amt = parseInt(adjAmt, 10);
+    if (!adjAmt || isNaN(amt) || amt <= 0) { alert("数量を入力してください"); return; }
+    const item = modal.item;
+    const newStock = adjType === "add" ? Number(item.stock) + amt : Math.max(0, Number(item.stock) - amt);
+    const updateData = { stock: newStock };
+    if (adjType === "add") updateData.received = Number(item.received || 0) + amt;
+    try {
+      setSyncStatus("saving");
+      await updateItem(item.id, updateData);
+      await loadItems();
+      setModal(null);
+    } catch(e) { setSyncStatus("error"); console.error(e); }
+  };
+
+  const handleExport = () => setModal({ type: "export", csv: itemsToCsv(items) });
 
   const handleImport = (e) => {
     const file = e.target.files[0];
@@ -308,60 +376,35 @@ export default function App() {
     reader.readAsText(file, "UTF-8");
   };
 
-  const applyImport = (mode) => {
+  const applyImport = async (mode) => {
     const parsed = modal.parsed;
-    const newItems = mode === "replace" ? parsed : [...items, ...parsed];
-    updateItems(newItems);
-    setImportResult({ added: parsed.length, errors: modal.errors, mode });
-    setModal(null);
+    try {
+      setSyncStatus("saving");
+      if (mode === "replace") {
+        // 全削除して追加
+        for (const item of items) { await deleteItemDb(item.id); }
+      }
+      for (const item of parsed) { await insertItem(toDbRow(item)); }
+      await loadItems();
+      setImportResult({ added: parsed.length, errors: modal.errors, mode });
+      setModal(null);
+    } catch(e) { setSyncStatus("error"); console.error(e); }
   };
 
-  const sendToGas = async () => {
-    let snapshot = {};
-    try {
-      const r = await window.storage.get(SNAPSHOT_KEY, true);
-      if (r) snapshot = JSON.parse(r.value);
-    } catch {}
-
-    const allRows = items.map(i => {
-      const h = dispLog.filter(d => d.itemId === i.id && d.store === "ヘブンズキッチン").reduce((s, d) => s + d.amount, 0);
-      const b = dispLog.filter(d => d.itemId === i.id && d.store === "ブースト").reduce((s, d) => s + d.amount, 0);
-      const d = dispLog.filter(d => d.itemId === i.id && d.store === "マディー").reduce((s, d) => s + d.amount, 0);
-      const adjIn = adjLog.filter(a => a.itemId === i.id).reduce((s, a) => s + a.amount, 0);
-      return { id: i.id, row: buildGasRow(i, h, b, d, adjIn) };
+  const sendToGas = () => {
+    const allRows = items.map(i =>
+      [i.id, i.name, i.location||"", i.category, i.stock, i.heavens_out||0, i.boost_out||0, i.muddy_out||0, i.unit, i.price||0, i.received||0, i.minStock].join("|")
+    );
+    const chunkSize = 8;
+    const chunks = [];
+    for (let i = 0; i < allRows.length; i += chunkSize) {
+      chunks.push({ data: allRows.slice(i, i + chunkSize).join("~"), action: i === 0 ? "savecsv" : "appendcsv" });
+    }
+    chunks.forEach((chunk, idx) => {
+      setTimeout(() => {
+        window.open(`${GAS_URL}?action=${chunk.action}&data=${encodeURIComponent(chunk.data)}&callback=test`, "_blank");
+      }, idx * 2500);
     });
-
-    const changedRows = allRows.filter(r => snapshot[r.id] !== r.row);
-    const newSnapshot = {};
-    allRows.forEach(r => { newSnapshot[r.id] = r.row; });
-
-    if (changedRows.length === 0) {
-      alert("変更がありません。スプレッドシートは最新です！");
-      return;
-    }
-
-    const isFirst = Object.keys(snapshot).length === 0;
-    const action = isFirst ? "savecsv" : "updaterows";
-    const data = isFirst ? allRows.map(r => r.row).join("~") : changedRows.map(r => r.row).join("~");
-    const url = `${GAS_URL}?action=${action}&data=${encodeURIComponent(data)}&callback=test`;
-
-    if (url.length > 7000 && isFirst) {
-      const chunkSize = 8;
-      const rows = allRows.map(r => r.row);
-      const chunks = [];
-      for (let i = 0; i < rows.length; i += chunkSize) {
-        chunks.push({ data: rows.slice(i, i + chunkSize).join("~"), action: i === 0 ? "savecsv" : "appendcsv" });
-      }
-      chunks.forEach((chunk, idx) => {
-        setTimeout(() => {
-          window.open(`${GAS_URL}?action=${chunk.action}&data=${encodeURIComponent(chunk.data)}&callback=test`, "_blank");
-        }, idx * 2500);
-      });
-    } else {
-      window.open(url, "_blank");
-    }
-
-    try { await window.storage.set(SNAPSHOT_KEY, JSON.stringify(newSnapshot), true); } catch {}
   };
 
   const syncDot = syncStatus === "loading" ? { color: "#94a3b8", label: "読込中..." }
@@ -445,7 +488,7 @@ export default function App() {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 360px), 1fr))", gap: 10 }}>
-          {syncStatus === "loading" ? (
+          {syncStatus === "loading" && items.length === 0 ? (
             <div style={{ gridColumn: "1/-1", padding: 48, textAlign: "center", color: "#94a3b8", background: "#fff", borderRadius: 12 }}>⏳ データを読み込み中...</div>
           ) : filtered.length === 0 ? (
             <div style={{ gridColumn: "1/-1", padding: 48, textAlign: "center", color: "#94a3b8", background: "#fff", borderRadius: 12 }}>該当する商品が見つかりません</div>
@@ -486,39 +529,13 @@ export default function App() {
         </div>
       </div>
 
-      {dispLog.length > 0 && (
-        <div style={{ maxWidth: 1200, margin: "0 auto 24px", padding: "0 16px" }}>
-          <div style={{ background: "#fff", borderRadius: 12, overflow: "hidden" }}>
-            <div style={{ background: "#1a2332", padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ color: "#fff", fontWeight: 700, fontSize: 13 }}>🚚 出庫履歴</span>
-              <button onClick={() => updateDispLog([])} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "#94a3b8", fontSize: 11, cursor: "pointer", borderRadius: 6, padding: "3px 8px" }}>クリア</button>
-            </div>
-            <div style={{ padding: "8px 0", maxHeight: 180, overflowY: "auto" }}>
-              {dispLog.map((log, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 20px", borderBottom: "1px solid #f1f5f9", fontSize: 13 }}>
-                  <span style={{ color: "#94a3b8", fontSize: 11 }}>{log.time}</span>
-                  <span>{log.icon}</span>
-                  <span style={{ fontWeight: 700 }}>{log.store}</span>
-                  <span style={{ color: "#475569" }}>← {log.itemName}</span>
-                  <span style={{ marginLeft: "auto", fontWeight: 700, color: "#dc2626" }}>－{log.amount}{log.unit}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
       {modal && modal.type === "adminMenu" && (
         <Modal title="⚙️ 管理者メニュー" onClose={() => setModal(null)}>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <button onClick={() => { setModal(null); setTimeout(openAdd, 50); }} style={{ width: "100%", padding: "12px", background: "#f0f9ff", border: "1.5px solid #bae6fd", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#0369a1", fontSize: 14, textAlign: "left" }}>＋ 商品追加</button>
             <button onClick={() => { setModal(null); setTimeout(() => fileRef.current.click(), 50); }} style={{ width: "100%", padding: "12px", background: "#f0fdf4", border: "1.5px solid #bbf7d0", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#15803d", fontSize: 14, textAlign: "left" }}>📥 CSVインポート</button>
             <button onClick={() => { setModal(null); setTimeout(handleExport, 50); }} style={{ width: "100%", padding: "12px", background: "#f0fdf4", border: "1.5px solid #bbf7d0", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#15803d", fontSize: 14, textAlign: "left" }}>📤 CSVエクスポート</button>
-            <button onClick={async () => {
-              setModal(null);
-              try { await window.storage.set(SNAPSHOT_KEY, JSON.stringify({}), true); } catch {}
-              setTimeout(sendToGas, 100);
-            }} style={{ width: "100%", padding: "12px", background: "#f5f3ff", border: "1.5px solid #ddd6fe", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#7c3aed", fontSize: 14, textAlign: "left" }}>📊 全件スプレッドシートに送信</button>
+            <button onClick={() => { setModal(null); setTimeout(sendToGas, 100); }} style={{ width: "100%", padding: "12px", background: "#f5f3ff", border: "1.5px solid #ddd6fe", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#7c3aed", fontSize: 14, textAlign: "left" }}>📊 スプレッドシートに送信</button>
             <button onClick={() => setModal({ type: "resetConfirm" })} style={{ width: "100%", padding: "12px", background: "#fff7ed", border: "1.5px solid #fed7aa", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#c2410c", fontSize: 14, textAlign: "left" }}>🔄 月次リセット</button>
           </div>
         </Modal>
@@ -528,11 +545,20 @@ export default function App() {
         <Modal title="🔄 月次リセット" onClose={() => setModal(null)}>
           <div style={{ background: "#fff7ed", border: "1.5px solid #fed7aa", borderRadius: 10, padding: "14px 16px", marginBottom: 20 }}>
             <div style={{ fontWeight: 700, color: "#92400e", fontSize: 14, marginBottom: 6 }}>⚠️ 以下がリセットされます</div>
-            <div style={{ fontSize: 13, color: "#78350f" }}>・各店舗への出庫数 → 0<br/>・出庫履歴</div>
+            <div style={{ fontSize: 13, color: "#78350f" }}>・各店舗への出庫数 → 0<br/>・入荷数 → 0</div>
           </div>
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={() => setModal(null)} style={{ flex: 1, padding: "10px", background: "#f1f5f9", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, color: "#475569" }}>キャンセル</button>
-            <button onClick={() => { updateDispLog([]); updateAdjLog([]); setModal(null); }} style={{ flex: 2, padding: "10px", background: "#dc2626", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#fff", fontSize: 14 }}>🔄 リセットする</button>
+            <button onClick={async () => {
+              try {
+                setSyncStatus("saving");
+                for (const item of items) {
+                  await updateItem(item.id, { heavens_out: 0, boost_out: 0, muddy_out: 0, received: 0 });
+                }
+                await loadItems();
+                setModal(null);
+              } catch(e) { setSyncStatus("error"); }
+            }} style={{ flex: 2, padding: "10px", background: "#dc2626", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#fff", fontSize: 14 }}>🔄 リセットする</button>
           </div>
         </Modal>
       )}
@@ -585,7 +611,7 @@ export default function App() {
           </div>
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={() => setModal(null)} style={{ flex: 1, padding: "10px", background: "#f1f5f9", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, color: "#475569" }}>キャンセル</button>
-            <button onClick={() => { deleteItem(modal.item.id); setModal(null); }} style={{ flex: 2, padding: "10px", background: "#dc2626", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#fff", fontSize: 14 }}>🗑️ 削除する</button>
+            <button onClick={() => deleteItem(modal.item.id)} style={{ flex: 2, padding: "10px", background: "#dc2626", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#fff", fontSize: 14 }}>🗑️ 削除する</button>
           </div>
         </Modal>
       )}
@@ -640,20 +666,7 @@ export default function App() {
           )}
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={() => setModal(null)} style={{ flex: 1, padding: "10px", background: "#f1f5f9", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, color: "#475569" }}>キャンセル</button>
-            <button onClick={() => {
-              const amt = parseInt(adjAmt, 10);
-              if (!adjAmt || isNaN(amt) || amt <= 0) { alert("数量を入力してください"); return; }
-              const newItems = items.map(i => {
-                if (i.id !== modal.item.id) return i;
-                return { ...i, stock: adjType === "add" ? Number(i.stock) + amt : Math.max(0, Number(i.stock) - amt) };
-              });
-              updateItems(newItems);
-              if (adjType === "add") {
-                const newLog = [{ itemId: modal.item.id, amount: amt }, ...adjLog.slice(0, 999)];
-                updateAdjLog(newLog);
-              }
-              setModal(null);
-            }} style={{ flex: 2, padding: "10px", background: adjType === "add" ? "#2563eb" : "#dc2626", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#fff", fontSize: 14 }}>
+            <button onClick={applyAdj} style={{ flex: 2, padding: "10px", background: adjType === "add" ? "#2563eb" : "#dc2626", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#fff", fontSize: 14 }}>
               {adjType === "add" ? "入荷する" : "出庫する"}
             </button>
           </div>
@@ -677,7 +690,7 @@ export default function App() {
           </Field>
           {dispAmt && !isNaN(parseInt(dispAmt)) && parseInt(dispAmt) > 0 && (
             <div style={{ background: "#f8fafc", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#475569", textAlign: "center" }}>
-              出庫後の在庫：<strong style={{ fontSize: 16, color: parseInt(dispAmt) > Number(modal.item.stock) ? "#dc2626" : "#1a2332" }}>{Math.max(0, Number(modal.item.stock) - parseInt(dispAmt))}</strong> {modal.item.unit}
+              出庫後の在庫：<strong style={{ fontSize: 16 }}>{Math.max(0, Number(modal.item.stock) - parseInt(dispAmt))}</strong> {modal.item.unit}
             </div>
           )}
           <div style={{ display: "flex", gap: 10 }}>
@@ -689,11 +702,10 @@ export default function App() {
 
       {modal && modal.type === "export" && (
         <Modal title="📤 CSVエクスポート" onClose={() => setModal(null)}>
-          <div style={{ fontSize: 13, color: "#475569", marginBottom: 10 }}>以下をコピーしてExcelなどに貼り付けてください。</div>
           <textarea readOnly value={modal.csv} onClick={e => e.target.select()} style={{ width: "100%", height: 220, fontFamily: "monospace", fontSize: 12, padding: 10, borderRadius: 8, border: "1.5px solid #e2e8f0", background: "#f8fafc", color: "#1a2332", resize: "none", boxSizing: "border-box", outline: "none" }} />
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <button onClick={() => setModal(null)} style={{ flex: 1, padding: "10px", background: "#f1f5f9", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, color: "#475569" }}>閉じる</button>
-            <button onClick={() => { const ta = document.createElement("textarea"); ta.value = modal.csv; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); }} style={{ flex: 2, padding: "10px", background: "#1a2332", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#fff", fontSize: 14 }}>📋 クリップボードにコピー</button>
+            <button onClick={() => { const ta = document.createElement("textarea"); ta.value = modal.csv; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); }} style={{ flex: 2, padding: "10px", background: "#1a2332", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#fff", fontSize: 14 }}>📋 コピー</button>
           </div>
         </Modal>
       )}
@@ -707,28 +719,19 @@ export default function App() {
               {modal.parsed.length > 4 && <div style={{ color: "#94a3b8" }}>… 他 {modal.parsed.length - 4}件</div>}
             </div>
           </div>
-          {modal.errors.length > 0 && (
-            <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#9a3412" }}>
-              {modal.errors.map((e, i) => <div key={i}>⚠ {e}</div>)}
-            </div>
-          )}
-          <div style={{ fontSize: 13, color: "#475569", marginBottom: 16 }}>インポート方法を選択してください：</div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => setModal(null)} style={{ flex: 1, padding: "10px", background: "#f1f5f9", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, color: "#475569", fontSize: 13 }}>キャンセル</button>
-            <button onClick={() => applyImport("append")} style={{ flex: 2, padding: "10px", background: "#2563eb", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#fff", fontSize: 13 }}>＋ 既存に追加</button>
-            <button onClick={() => applyImport("replace")} style={{ flex: 2, padding: "10px", background: "#dc2626", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#fff", fontSize: 13 }}>🔄 全て置き換え</button>
+            <button onClick={() => setModal(null)} style={{ flex: 1, padding: "10px", background: "#f1f5f9", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, color: "#475569" }}>キャンセル</button>
+            <button onClick={() => applyImport("append")} style={{ flex: 2, padding: "10px", background: "#2563eb", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#fff" }}>＋ 既存に追加</button>
+            <button onClick={() => applyImport("replace")} style={{ flex: 2, padding: "10px", background: "#dc2626", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#fff" }}>🔄 全て置き換え</button>
           </div>
         </Modal>
       )}
 
       {importResult && (
-        <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 2000, background: importResult.added > 0 ? "#1a2332" : "#dc2626", color: "#fff", borderRadius: 12, padding: "14px 20px", boxShadow: "0 8px 24px rgba(0,0,0,0.2)", maxWidth: 340, fontSize: 13 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-            <div>
-              {importResult.added > 0 && <div style={{ fontWeight: 700, marginBottom: 4 }}>✅ {importResult.added}件を{importResult.mode === "replace" ? "置き換え" : "追加"}しました</div>}
-              {importResult.errors.map((e, i) => <div key={i} style={{ color: "#fca5a5", fontSize: 12 }}>⚠ {e}</div>)}
-            </div>
-            <button onClick={() => setImportResult(null)} style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
+        <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 2000, background: "#1a2332", color: "#fff", borderRadius: 12, padding: "14px 20px", boxShadow: "0 8px 24px rgba(0,0,0,0.2)", fontSize: 13 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+            <div style={{ fontWeight: 700 }}>✅ {importResult.added}件を{importResult.mode === "replace" ? "置き換え" : "追加"}しました</div>
+            <button onClick={() => setImportResult(null)} style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 18 }}>×</button>
           </div>
         </div>
       )}

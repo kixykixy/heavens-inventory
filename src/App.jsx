@@ -430,8 +430,7 @@ export default function App() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <input ref={fileRef} type="file" accept=".csv" onChange={handleImport} style={{ display: "none" }} />
-            <button onClick={sendToGas} style={{ background: "#f59e0b", color: "#1a2332", border: "none", padding: "7px 14px", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>✅ 確定</button>
-            <button onClick={() => setModal({ type: "adminMenu" })} style={{ background: "rgba(255,255,255,0.08)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.15)", padding: "6px 12px", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>⚙️ 管理</button>
+            <button onClick={() => setModal({ type: "adminMenu" })} style={{ background: "rgba(255,255,255,0.08)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.15)", padding: "6px 16px", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>⚙️ 管理</button>
           </div>
         </div>
       </div>
@@ -476,10 +475,10 @@ export default function App() {
             </select>
             <span style={{ color: "#94a3b8", fontSize: 13, marginLeft: "auto" }}>{filtered.length} 件表示</span>
           </div>
-          <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {["すべて", ...LOCATIONS.filter(l => l !== "")].map(l => (
               <button key={l} onClick={() => setLocFilter(l === "すべて" ? null : l)}
-                style={{ padding: "4px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1.5px solid", whiteSpace: "nowrap", flexShrink: 0, borderColor: locFilter === l || (l === "すべて" && !locFilter) ? "#1a2332" : "#e2e8f0", background: locFilter === l || (l === "すべて" && !locFilter) ? "#1a2332" : "#f8fafc", color: locFilter === l || (l === "すべて" && !locFilter) ? "#fff" : "#64748b" }}>
+                style={{ padding: "4px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1.5px solid", whiteSpace: "nowrap", borderColor: locFilter === l || (l === "すべて" && !locFilter) ? "#1a2332" : "#e2e8f0", background: locFilter === l || (l === "すべて" && !locFilter) ? "#1a2332" : "#f8fafc", color: locFilter === l || (l === "すべて" && !locFilter) ? "#fff" : "#64748b" }}>
                 {l}
               </button>
             ))}

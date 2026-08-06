@@ -156,23 +156,39 @@ function itemsToCsv(items) {
   return "\uFEFF" + rows.join("\r\n");
 }
 
-function PasswordScreen({ onUnlock }) {
-  const [input, setInput] = useState("");
-  const [error, setError] = useState(false);
-  const handleSubmit = () => {
-    if (input === PASSWORD) { onUnlock(); }
-    else { setError(true); setTimeout(() => setError(false), 2000); }
-  };
+function StartScreen({ onStart }) {
   return (
     <div style={{ minHeight: "100vh", background: "#1a2332", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Inter','Segoe UI',sans-serif" }}>
       <div style={{ background: "#fff", borderRadius: 20, padding: "40px 32px", width: "100%", maxWidth: 360, boxShadow: "0 25px 60px rgba(0,0,0,0.4)", textAlign: "center" }}>
-        <div style={{ background: "#f59e0b", width: 56, height: 56, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 20px" }}>📦</div>
-        <div style={{ fontWeight: 800, fontSize: 20, color: "#1a2332", marginBottom: 4 }}>ヘブンズ在庫管理</div>
-        <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 28 }}>パスワードを入力してください</div>
-        <input type="password" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} placeholder="パスワード"
-          style={{ width: "100%", padding: "12px 16px", border: `2px solid ${error ? "#ef4444" : "#e2e8f0"}`, borderRadius: 10, fontSize: 16, outline: "none", boxSizing: "border-box", textAlign: "center", letterSpacing: "0.1em", marginBottom: 12 }} autoFocus />
-        {error && <div style={{ color: "#ef4444", fontSize: 13, marginBottom: 8 }}>パスワードが違います</div>}
-        <button onClick={handleSubmit} style={{ width: "100%", padding: "12px", background: "#1a2332", border: "none", borderRadius: 10, cursor: "pointer", fontWeight: 700, color: "#fff", fontSize: 15 }}>ログイン</button>
+        <div style={{ background: "#f59e0b", width: 72, height: 72, borderRadius: 20, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, margin: "0 auto 20px" }}>📦</div>
+        <div style={{ fontWeight: 800, fontSize: 22, color: "#1a2332", marginBottom: 8 }}>ヘブンズ在庫管理</div>
+        <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 32 }}>INVENTORY MANAGER</div>
+        <button onClick={onStart} style={{ width: "100%", padding: "16px", background: "#1a2332", border: "none", borderRadius: 12, cursor: "pointer", fontWeight: 800, color: "#fff", fontSize: 18, letterSpacing: "0.05em" }}>スタート</button>
+      </div>
+    </div>
+  );
+}
+
+function AdminPasswordModal({ onSuccess, onClose }) {
+  const [input, setInput] = useState("");
+  const [error, setError] = useState(false);
+  const handleSubmit = () => {
+    if (input === PASSWORD) { onSuccess(); }
+    else { setError(true); setTimeout(() => setError(false), 2000); }
+  };
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, padding: 16 }}>
+      <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 340, boxShadow: "0 25px 60px rgba(0,0,0,0.25)", overflow: "hidden" }}>
+        <div style={{ background: "#1a2332", padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h2 style={{ margin: 0, color: "#fff", fontSize: 15, fontWeight: 600 }}>🔐 管理者パスワード</h2>
+          <button onClick={onClose} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", width: 28, height: 28, borderRadius: 6, cursor: "pointer", fontSize: 16 }}>×</button>
+        </div>
+        <div style={{ padding: 20 }}>
+          <input type="password" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} placeholder="パスワードを入力"
+            style={{ width: "100%", padding: "12px 16px", border: `2px solid ${error ? "#ef4444" : "#e2e8f0"}`, borderRadius: 10, fontSize: 16, outline: "none", boxSizing: "border-box", textAlign: "center", letterSpacing: "0.1em", marginBottom: 8 }} autoFocus />
+          {error && <div style={{ color: "#ef4444", fontSize: 12, marginBottom: 8, textAlign: "center" }}>パスワードが違います</div>}
+          <button onClick={handleSubmit} style={{ width: "100%", padding: "11px", background: "#1a2332", border: "none", borderRadius: 10, cursor: "pointer", fontWeight: 700, color: "#fff", fontSize: 14 }}>確認</button>
+        </div>
       </div>
     </div>
   );
@@ -222,6 +238,7 @@ const inp = { width: "100%", padding: "10px 12px", border: "1.5px solid #e2e8f0"
 
 export default function App() {
   const [unlocked, setUnlocked] = useState(false);
+  const [adminModal, setAdminModal] = useState(null); // 管理者パスワードモーダル用
   const [items, setItems] = useState([]);
   const [selCat, setSelCat] = useState("すべて");
   const [q, setQ] = useState("");
@@ -412,7 +429,7 @@ export default function App() {
     : syncStatus === "error" ? { color: "#ef4444", label: "エラー" }
     : { color: "#22c55e", label: lastSync ? `${lastSync.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })} 同期済` : "同期済" };
 
-  if (!unlocked) return <PasswordScreen onUnlock={() => setUnlocked(true)} />;
+  if (!unlocked) return <StartScreen onStart={() => setUnlocked(true)} />;
 
   return (
     <div style={{ minHeight: "100vh", background: "#f1f5f9", fontFamily: "'Inter','Segoe UI',sans-serif", color: "#1a2332" }}>
@@ -430,7 +447,7 @@ export default function App() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <input ref={fileRef} type="file" accept=".csv" onChange={handleImport} style={{ display: "none" }} />
-            <button onClick={() => setModal({ type: "adminMenu" })} style={{ background: "rgba(255,255,255,0.08)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.15)", padding: "6px 16px", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>⚙️ 管理</button>
+            <button onClick={() => setAdminModal({ onSuccess: () => { setAdminModal(null); setModal({ type: "adminMenu" }); } })} style={{ background: "rgba(255,255,255,0.08)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.15)", padding: "6px 16px", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>⚙️ 管理</button>
           </div>
         </div>
       </div>
@@ -527,6 +544,8 @@ export default function App() {
         </div>
       </div>
 
+      {adminModal && <AdminPasswordModal onSuccess={adminModal.onSuccess} onClose={() => setAdminModal(null)} />}
+
       {modal && modal.type === "adminMenu" && (
         <Modal title="⚙️ 管理者メニュー" onClose={() => setModal(null)}>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -594,8 +613,8 @@ export default function App() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <button onClick={() => { setModal(null); setTimeout(() => openAdj(item), 50); }} style={{ width: "100%", padding: "12px", background: "#eff6ff", border: "1.5px solid #bfdbfe", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#2563eb", fontSize: 14 }}>📦 入荷・出庫</button>
-              <button onClick={() => { setModal(null); setTimeout(() => openEdit(item), 50); }} style={{ width: "100%", padding: "12px", background: "#f0fdf4", border: "1.5px solid #bbf7d0", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#15803d", fontSize: 14 }}>✏️ 編集</button>
-              <button onClick={() => setModal({ type: "deleteConfirm", item })} style={{ width: "100%", padding: "12px", background: "#fff1f2", border: "1.5px solid #fecdd3", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#be123c", fontSize: 14 }}>🗑️ 削除</button>
+              <button onClick={() => setAdminModal({ onSuccess: () => { setAdminModal(null); setModal(null); setTimeout(() => openEdit(item), 50); } })} style={{ width: "100%", padding: "12px", background: "#f0fdf4", border: "1.5px solid #bbf7d0", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#15803d", fontSize: 14 }}>✏️ 編集</button>
+              <button onClick={() => setAdminModal({ onSuccess: () => { setAdminModal(null); setModal({ type: "deleteConfirm", item }); } })} style={{ width: "100%", padding: "12px", background: "#fff1f2", border: "1.5px solid #fecdd3", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#be123c", fontSize: 14 }}>🗑️ 削除</button>
             </div>
           </Modal>
         );

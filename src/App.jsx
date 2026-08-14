@@ -3,7 +3,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 const SUPABASE_URL = "https://aghubdcnpcrirngtpiyk.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFnaHViZGNucGNyaXJuZ3RwaXlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU4Mzg1ODIsImV4cCI6MjEwMTQxNDU4Mn0.6Y3Uy6tjY41hLaMwfELLqfHYB1wp46SFuqDhpKFsrcA";
 const TABLE = "inventory_items";
-const PASSWORD = "muddy";
+const PASSWORD = "kixy";
 const GAS_URL = "https://script.google.com/macros/s/AKfycbz2ICyvGq1sgr1l6tHbLD8h6QylYBkn86fmGWspfs8pBGx03fQPfyDMRncthEVz-0BU/exec";
 
 const CATEGORIES = ["すべて", "ウイスキー", "スピリッツ", "リキュール", "ジュース", "ビール", "ワイン", "焼酎"];

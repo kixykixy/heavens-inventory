@@ -482,10 +482,12 @@ export default function App() {
         <div style={{ background: "#fff", borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
             <input placeholder="🔍　商品名で検索..." value={q} onChange={e => setQ(e.target.value)} style={{ ...inp, flex: "1 1 200px", maxWidth: 280 }} />
-            <select value={selCat} onChange={e => setSelCat(e.target.value)} style={{ ...inp, width: "auto" }}>
-              {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+            <select value={selCat} onChange={e => setSelCat(e.target.value)}
+              style={{ ...inp, width: "auto", WebkitAppearance: "menulist", appearance: "menulist", cursor: "pointer", touchAction: "manipulation" }}>
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ ...inp, width: "auto" }}>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+              style={{ ...inp, width: "auto", WebkitAppearance: "menulist", appearance: "menulist", cursor: "pointer", touchAction: "manipulation" }}>
               <option value="name">名前順</option>
               <option value="category">カテゴリ順</option>
               <option value="location">場所順</option>
@@ -638,12 +640,12 @@ export default function App() {
           <Field label="商品名"><input style={inp} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="例：山崎12年" /></Field>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Field label="カテゴリ">
-              <select style={inp} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+              <select style={{ ...inp, WebkitAppearance: "menulist", appearance: "menulist", cursor: "pointer", touchAction: "manipulation" }} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
                 {CATEGORIES.filter(c => c !== "すべて").map(c => <option key={c}>{c}</option>)}
               </select>
             </Field>
             <Field label="場所">
-              <select style={inp} value={form.location || ""} onChange={e => setForm(f => ({ ...f, location: e.target.value }))}>
+              <select style={{ ...inp, WebkitAppearance: "menulist", appearance: "menulist", cursor: "pointer", touchAction: "manipulation" }} value={form.location || ""} onChange={e => setForm(f => ({ ...f, location: e.target.value }))}>
                 {LOCATIONS.map(l => <option key={l} value={l}>{l || "— 未設定 —"}</option>)}
               </select>
             </Field>

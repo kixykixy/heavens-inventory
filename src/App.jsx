@@ -4,7 +4,6 @@ const SUPABASE_URL = "https://aghubdcnpcrirngtpiyk.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFnaHViZGNucGNyaXJuZ3RwaXlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU4Mzg1ODIsImV4cCI6MjEwMTQxNDU4Mn0.6Y3Uy6tjY41hLaMwfELLqfHYB1wp46SFuqDhpKFsrcA";
 const TABLE = "inventory_items";
 const PASSWORD = "kixy";
-const GAS_URL = "https://script.google.com/macros/s/AKfycbz2ICyvGq1sgr1l6tHbLD8h6QylYBkn86fmGWspfs8pBGx03fQPfyDMRncthEVz-0BU/exec";
 
 const CATEGORIES = ["すべて", "ウイスキー", "スピリッツ", "リキュール", "ジュース", "ビール", "ワイン", "焼酎"];
 const LOCATIONS = ["", "１番", "1-2番", "２番", "３番", "４番", "4-5番", "５番", "バック", "ショーケース", "カウンター"];
@@ -431,22 +430,6 @@ export default function App() {
       setImportResult({ added: parsed.length, errors: modal.errors, mode });
       setModal(null);
     } catch(e) { setSyncStatus("error"); console.error(e); }
-  };
-
-  const sendToGas = () => {
-    const allRows = items.map(i =>
-      [i.id, i.name, i.location||"", i.category, i.stock, i.heavens_out||0, i.boost_out||0, i.muddy_out||0, i.unit, i.price||0, i.received||0, i.minStock].join("|")
-    );
-    const chunkSize = 8;
-    const chunks = [];
-    for (let i = 0; i < allRows.length; i += chunkSize) {
-      chunks.push({ data: allRows.slice(i, i + chunkSize).join("~"), action: i === 0 ? "savecsv" : "appendcsv" });
-    }
-    chunks.forEach((chunk, idx) => {
-      setTimeout(() => {
-        window.open(`${GAS_URL}?action=${chunk.action}&data=${encodeURIComponent(chunk.data)}&callback=test`, "_blank");
-      }, idx * 2500);
-    });
   };
 
   const syncDot = syncStatus === "loading" ? { color: "#94a3b8", label: "読込中..." }

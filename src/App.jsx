@@ -724,7 +724,25 @@ export default function App() {
           <textarea readOnly value={modal.csv} onClick={e => e.target.select()} style={{ width: "100%", height: 220, fontFamily: "monospace", fontSize: 12, padding: 10, borderRadius: 8, border: "1.5px solid #e2e8f0", background: "#f8fafc", color: "#1a2332", resize: "none", boxSizing: "border-box", outline: "none" }} />
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <button onClick={() => setModal(null)} style={{ flex: 1, padding: "10px", background: "#f1f5f9", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, color: "#475569" }}>閉じる</button>
-            <button onClick={() => { const ta = document.createElement("textarea"); ta.value = modal.csv; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); }} style={{ flex: 2, padding: "10px", background: "#1a2332", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#fff", fontSize: 14 }}>📋 コピー</button>
+            <button onClick={() => {
+              const ta = document.createElement("textarea");
+              ta.value = modal.csv;
+              ta.style.position = "fixed";
+              ta.style.opacity = "0";
+              document.body.appendChild(ta);
+              ta.select();
+              document.execCommand("copy");
+              document.body.removeChild(ta);
+            }} style={{ flex: 1, padding: "10px", background: "#1a2332", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#fff", fontSize: 14 }}>📋 コピー</button>
+            <button onClick={() => {
+              const blob = new Blob([modal.csv], { type: "text/csv;charset=utf-8;" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `heavens_${new Date().toISOString().slice(0,10)}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }} style={{ flex: 1, padding: "10px", background: "#16a34a", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#fff", fontSize: 14 }}>💾 保存</button>
           </div>
         </Modal>
       )}

@@ -7,7 +7,7 @@ const PASSWORD = "kixy";
 const GAS_URL = "https://script.google.com/macros/s/AKfycbz2ICyvGq1sgr1l6tHbLD8h6QylYBkn86fmGWspfs8pBGx03fQPfyDMRncthEVz-0BU/exec";
 
 const CATEGORIES = ["すべて", "ウイスキー", "スピリッツ", "リキュール", "ジュース", "ビール", "ワイン", "焼酎"];
-const LOCATIONS = ["", "１番", "1-2番", "２番", "３番", "４番", "4-5番", "５番", "バック"];
+const LOCATIONS = ["", "１番", "1-2番", "２番", "３番", "４番", "4-5番", "５番", "バック", "ショーケース"];
 
 const STORES = [
   { id: "heavens", name: "ヘブンズキッチン", col: "heavens_out", color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe", icon: "🍽️" },

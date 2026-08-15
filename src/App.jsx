@@ -150,17 +150,34 @@ function itemsToCsv(items) {
   const esc = v => `"${String(v).replace(/"/g, '""')}"`;
   const headers = ["商品名","カテゴリー","場所","在庫数","最低在庫数","単位","仕入れ価格","ヘブンズキッチン出庫","ブースト出庫","マディー出庫","入荷数","ヘブンズ出庫金額","ブースト出庫金額","マディー出庫金額"];
   const rows = [headers.join(",")];
+  
+  let totalH = 0, totalB = 0, totalM = 0;
+  
   items.forEach(i => {
     const price = Number(i.price) || 0;
     const h = Number(i.heavens_out) || 0;
     const b = Number(i.boost_out) || 0;
     const m = Number(i.muddy_out) || 0;
+    const hAmt = price * h;
+    const bAmt = price * b;
+    const mAmt = price * m;
+    totalH += hAmt;
+    totalB += bAmt;
+    totalM += mAmt;
     rows.push([
       i.name, i.category, i.location, i.stock, i.minStock, i.unit, price,
       h, b, m, i.received||0,
-      price * h, price * b, price * m
+      hAmt, bAmt, mAmt
     ].map(esc).join(","));
   });
+
+  // 合計行
+  rows.push([
+    "【合計】", "", "", "", "", "", "",
+    "", "", "", "",
+    totalH, totalB, totalM
+  ].map(esc).join(","));
+
   return "\uFEFF" + rows.join("\r\n");
 }
 

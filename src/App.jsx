@@ -4,6 +4,8 @@ const SUPABASE_URL = "https://aghubdcnpcrirngtpiyk.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFnaHViZGNucGNyaXJuZ3RwaXlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU4Mzg1ODIsImV4cCI6MjEwMTQxNDU4Mn0.6Y3Uy6tjY41hLaMwfELLqfHYB1wp46SFuqDhpKFsrcA";
 const TABLE = "inventory_items";
 const PASSWORD = "kixy";
+const DEFAULT_PRINTER_IP = "192.168.86.210";
+const DEFAULT_PRINTER_PORT = 9100;
 
 const CATEGORIES = ["すべて", "ウイスキー", "スピリッツ", "リキュール", "ジュース", "ビール", "ワイン", "焼酎"];
 const LOCATIONS = ["", "１番", "1-2番", "２番", "３番", "４番", "4-5番", "５番", "バック", "ショーケース", "カウンター"];
@@ -13,6 +15,36 @@ const STORES = [
   { id: "boost",   name: "ブースト",         col: "boost_out",   color: "#0369a1", bg: "#f0f9ff", border: "#bae6fd", icon: "⚡" },
   { id: "maddy",   name: "マディー",          col: "muddy_out",   color: "#be185d", bg: "#fdf2f8", border: "#fbcfe8", icon: "🌸" },
 ];
+
+// ESC/POS印刷データ生成
+function buildEscPos(title, items) {
+  const lines = [];
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  lines.push('\x1b\x40');        // 初期化
+  lines.push('\x1b\x61\x01');    // センタリング
+  lines.push('HEAVENS KITCHEN\n');
+  lines.push(title + '\n');
+  lines.push(dateStr + '\n');
+  lines.push('\x1b\x61\x00');    // 左揃え
+  lines.push('--------------------------------\n');
+  lines.push('Name               Stock\n');
+  lines.push('--------------------------------\n');
+  items.forEach(item => {
+    const name = item.name.length > 18 ? item.name.slice(0, 17) + '~' : item.name;
+    const qty = String(item.stock);
+    const pad = Math.max(1, 31 - name.length - qty.length);
+    lines.push(name + ' '.repeat(pad) + qty + '\n');
+  });
+  lines.push('--------------------------------\n');
+  lines.push('Total: ' + items.length + ' items\n');
+  lines.push('\n\n\n');
+  lines.push('\x1d\x56\x41\x00'); // 自動カット
+  const str = lines.join('');
+  const bytes = [];
+  for (let i = 0; i < str.length; i++) bytes.push(str.charCodeAt(i) & 0xFF);
+  return btoa(String.fromCharCode(...bytes));
+}
 
 // Supabase API呼び出し
 async function sbFetch(path, options = {}) {
@@ -262,6 +294,8 @@ const inp = { width: "100%", padding: "10px 12px", border: "1.5px solid #e2e8f0"
 
 export default function App() {
   const [unlocked, setUnlocked] = useState(false);
+  const [printerIp, setPrinterIp] = useState(() => localStorage.getItem('printer-ip') || DEFAULT_PRINTER_IP);
+  const [printerPort, setPrinterPort] = useState(() => Number(localStorage.getItem('printer-port')) || DEFAULT_PRINTER_PORT);
   const [adminModal, setAdminModal] = useState(null); // 管理者パスワードモーダル用
   const [items, setItems] = useState([]);
   const [selCat, setSelCat] = useState("すべて");
@@ -398,6 +432,32 @@ export default function App() {
   };
 
   const handleExport = () => setModal({ type: "export", csv: itemsToCsv(items) });
+
+  const handlePrint = async () => {
+    const title = locFilter ? locFilter + ' 在庫リスト' : '全在庫リスト';
+    const printItems = filtered;
+    if (printItems.length === 0) { alert('印刷するデータがありません'); return; }
+    setModal(null);
+    setSyncStatus("saving");
+    try {
+      const data = buildEscPos(title, printItems);
+      const res = await fetch('/api/print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip: printerIp, port: printerPort, data }),
+      });
+      const result = await res.json();
+      if (result.success) {
+        alert('印刷しました！');
+      } else {
+        alert('印刷エラー: ' + result.error);
+      }
+    } catch(e) {
+      alert('プリンターに接続できませんでした: ' + e.message);
+    } finally {
+      setSyncStatus("synced");
+    }
+  };
 
   const handleImport = (e) => {
     const file = e.target.files[0];
@@ -562,7 +622,33 @@ export default function App() {
             <button onClick={() => { setModal(null); setTimeout(openAdd, 50); }} style={{ width: "100%", padding: "12px", background: "#f0f9ff", border: "1.5px solid #bae6fd", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#0369a1", fontSize: 14, textAlign: "left" }}>＋ 商品追加</button>
             <button onClick={() => { setModal(null); setTimeout(() => fileRef.current.click(), 50); }} style={{ width: "100%", padding: "12px", background: "#f0fdf4", border: "1.5px solid #bbf7d0", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#15803d", fontSize: 14, textAlign: "left" }}>📥 CSVインポート</button>
             <button onClick={() => { setModal(null); setTimeout(handleExport, 50); }} style={{ width: "100%", padding: "12px", background: "#f0fdf4", border: "1.5px solid #bbf7d0", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#15803d", fontSize: 14, textAlign: "left" }}>📤 CSVエクスポート</button>
+            <button onClick={handlePrint} style={{ width: "100%", padding: "12px", background: "#f0f9ff", border: "1.5px solid #bae6fd", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#0369a1", fontSize: 14, textAlign: "left" }}>🖨️ 印刷（{locFilter || 'すべて'}）</button>
+            <button onClick={() => setModal({ type: "printerSettings" })} style={{ width: "100%", padding: "12px", background: "#f8fafc", border: "1.5px solid #e2e8f0", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#475569", fontSize: 14, textAlign: "left" }}>⚙️ プリンター設定</button>
             <button onClick={() => setModal({ type: "resetConfirm" })} style={{ width: "100%", padding: "12px", background: "#fff7ed", border: "1.5px solid #fed7aa", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#c2410c", fontSize: 14, textAlign: "left" }}>🔄 月次リセット</button>
+          </div>
+        </Modal>
+      )}
+
+      {modal && modal.type === "printerSettings" && (
+        <Modal title="🖨️ プリンター設定" onClose={() => setModal(null)}>
+          <Field label="プリンターIPアドレス">
+            <input style={inp} value={printerIp} onChange={e => setPrinterIp(e.target.value)} placeholder="192.168.86.210" />
+          </Field>
+          <Field label="ポート番号">
+            <input style={inp} type="number" value={printerPort} onChange={e => setPrinterPort(Number(e.target.value))} placeholder="9100" />
+          </Field>
+          <div style={{ background: "#f8fafc", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#64748b" }}>
+            CITIZEN CT-S255 / LAN接続 / ESC/POS<br/>
+            ポート番号は通常9100です
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={() => setModal(null)} style={{ flex: 1, padding: "10px", background: "#f1f5f9", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, color: "#475569" }}>キャンセル</button>
+            <button onClick={() => {
+              localStorage.setItem('printer-ip', printerIp);
+              localStorage.setItem('printer-port', String(printerPort));
+              setModal(null);
+              alert('設定を保存しました！');
+            }} style={{ flex: 2, padding: "10px", background: "#1a2332", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#fff", fontSize: 14 }}>保存する</button>
           </div>
         </Modal>
       )}

@@ -294,6 +294,7 @@ const inp = { width: "100%", padding: "10px 12px", border: "1.5px solid #e2e8f0"
 
 export default function App() {
   const [unlocked, setUnlocked] = useState(false);
+  const [printerProxy, setPrinterProxy] = useState(() => localStorage.getItem('printer-proxy') || 'http://192.168.86.183:3001');
   const [printerIp, setPrinterIp] = useState(() => localStorage.getItem('printer-ip') || DEFAULT_PRINTER_IP);
   const [printerPort, setPrinterPort] = useState(() => Number(localStorage.getItem('printer-port')) || DEFAULT_PRINTER_PORT);
   const [adminModal, setAdminModal] = useState(null); // 管理者パスワードモーダル用
@@ -441,7 +442,7 @@ export default function App() {
     setSyncStatus("saving");
     try {
       const data = buildEscPos(title, printItems);
-      const res = await fetch('/api/print', {
+      const res = await fetch(printerProxy, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ip: printerIp, port: printerPort, data }),
@@ -631,6 +632,9 @@ export default function App() {
 
       {modal && modal.type === "printerSettings" && (
         <Modal title="🖨️ プリンター設定" onClose={() => setModal(null)}>
+          <Field label="プロキシサーバーURL（NAS）">
+            <input style={inp} value={printerProxy} onChange={e => setPrinterProxy(e.target.value)} placeholder="http://192.168.86.183:3001" />
+          </Field>
           <Field label="プリンターIPアドレス">
             <input style={inp} value={printerIp} onChange={e => setPrinterIp(e.target.value)} placeholder="192.168.86.210" />
           </Field>
@@ -638,12 +642,12 @@ export default function App() {
             <input style={inp} type="number" value={printerPort} onChange={e => setPrinterPort(Number(e.target.value))} placeholder="9100" />
           </Field>
           <div style={{ background: "#f8fafc", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#64748b" }}>
-            CITIZEN CT-S255 / LAN接続 / ESC/POS<br/>
-            ポート番号は通常9100です
+            NAS（192.168.86.183）でDockerプロキシを起動してから使用してください
           </div>
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={() => setModal(null)} style={{ flex: 1, padding: "10px", background: "#f1f5f9", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, color: "#475569" }}>キャンセル</button>
             <button onClick={() => {
+              localStorage.setItem('printer-proxy', printerProxy);
               localStorage.setItem('printer-ip', printerIp);
               localStorage.setItem('printer-port', String(printerPort));
               setModal(null);

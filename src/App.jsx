@@ -21,9 +21,11 @@ function buildEscPos(title, items) {
   const now = new Date();
   const dateStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
-  const ESC = '\x1b', GS = '\x1d';
+  const ESC = '\x1b', GS = '\x1d', FS = '\x1c';
   let str = '';
   str += ESC + '@';           // 初期化
+  str += ESC + 'R\x08';      // 文字コード：日本語(Katakana)
+  str += FS + '&';            // 漢字モードON
   str += ESC + 'a\x01';      // センタリング
   str += 'HEAVENS KITCHEN\n';
   str += title + '\n';
@@ -45,7 +47,6 @@ function buildEscPos(title, items) {
   str += '\n\n\n';
   str += GS + 'V\x41\x00';  // 自動カット
 
-  // UTF-8バイト列をbase64エンコード
   const bytes = new TextEncoder().encode(str);
   return btoa(String.fromCharCode(...bytes));
 }

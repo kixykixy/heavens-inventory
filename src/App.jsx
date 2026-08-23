@@ -21,29 +21,28 @@ function buildEscPos(title, items) {
   const now = new Date();
   const dateStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
-  const ESC = '\x1b', GS = '\x1d', FS = '\x1c';
+  const ESC = '\x1b', GS = '\x1d';
   let str = '';
   str += ESC + '@';           // 初期化
-  str += ESC + 'R\x08';      // 文字コード：日本語(Katakana)
-  str += FS + '&';            // 漢字モードON
+  str += ESC + 't\x01';      // 文字コードページ：Katakana
   str += ESC + 'a\x01';      // センタリング
   str += 'HEAVENS KITCHEN\n';
   str += title + '\n';
   str += dateStr + '\n';
   str += ESC + 'a\x00';      // 左揃え
   str += '--------------------------------\n';
-  str += '商品名             在庫\n';
+  str += 'Name               Stock\n';
   str += '--------------------------------\n';
 
   items.forEach(item => {
-    const name = item.name.length > 10 ? item.name.slice(0, 9) + '~' : item.name;
+    const name = item.name.length > 18 ? item.name.slice(0, 17) + '~' : item.name;
     const qty = String(item.stock);
-    const spaces = ' '.repeat(Math.max(1, 20 - name.length * 2 - qty.length));
-    str += name + spaces + qty + '\n';
+    const pad = Math.max(1, 31 - name.length - qty.length);
+    str += name + ' '.repeat(pad) + qty + '\n';
   });
 
   str += '--------------------------------\n';
-  str += `合計: ${items.length}種\n`;
+  str += `Total: ${items.length} items\n`;
   str += '\n\n\n';
   str += GS + 'V\x41\x00';  // 自動カット
 

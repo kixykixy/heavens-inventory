@@ -29,6 +29,7 @@ function buildEscPos(title, items) {
     return str
       .replace(/[！-～]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
       .replace(/　/g, ' ')
+      // eslint-disable-next-line no-control-regex
       .replace(/[^\x00-\x7F]/g, '?');
   };
 

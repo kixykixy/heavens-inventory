@@ -16,50 +16,66 @@ const STORES = [
   { id: "maddy",   name: "マディー",          col: "muddy_out",   color: "#be185d", bg: "#fdf2f8", border: "#fbcfe8", icon: "🌸" },
 ];
 
-// ESC/POS印刷データ生成（ASCII only）
+// ESC/POS印刷データ生成（日本語対応）
 function buildEscPos(title, items) {
-  const lines = [];
+  function strToBytes(str) {
+    const bytes = [];
+    for (let i = 0; i < str.length; i++) {
+      const c = str.charCodeAt(i);
+      if (c < 0x80) {
+        bytes.push(c);
+      } else if (c >= 0xFF01 && c <= 0xFF5E) {
+        bytes.push(c - 0xFEE0);
+      } else if (c >= 0xFF61 && c <= 0xFF9F) {
+        bytes.push(c - 0xFF61 + 0xA1);
+      } else {
+        bytes.push(0x3F);
+      }
+    }
+    return bytes;
+  }
+
+  function pushStr(buf, str) {
+    strToBytes(str).forEach(b => buf.push(b));
+  }
+
   const now = new Date();
   const dateStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
-  // カタカナ→ローマ字変換テーブル
-  const toAscii = (str) => {
-    if (!str) return '';
-    // 半角に変換できるものは変換、それ以外はそのまま
-    return str
-      .replace(/[！-～]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
-      .replace(/　/g, ' ')
-      // eslint-disable-next-line no-control-regex
-      .replace(/[^\x00-\x7F]/g, '?');
-  };
+  const buf = [];
+  const p = (...bytes) => bytes.forEach(b => buf.push(b));
 
-  lines.push('\x1b\x40');        // 初期化
-  lines.push('\x1b\x61\x01');    // センタリング
-  lines.push('HEAVENS KITCHEN\n');
-  lines.push(toAscii(title) + '\n');
-  lines.push(dateStr + '\n');
-  lines.push('\x1b\x61\x00');    // 左揃え
-  lines.push('--------------------------------\n');
-  lines.push('Name               Stock\n');
-  lines.push('--------------------------------\n');
+  p(0x1B, 0x40);
+  p(0x1B, 0x61, 0x01);
+  pushStr(buf, 'HEAVENS KITCHEN\n');
+  pushStr(buf, title + '\n');
+  pushStr(buf, dateStr + '\n');
+  p(0x1B, 0x61, 0x00);
+  pushStr(buf, '--------------------------------\n');
+  pushStr(buf, 'Name               Stock\n');
+  pushStr(buf, '--------------------------------\n');
 
   items.forEach(item => {
-    const name = toAscii(item.name);
-    const shortName = name.length > 18 ? name.slice(0, 17) + '~' : name;
+    let displayLen = 0;
+    let displayName = '';
+    for (let i = 0; i < item.name.length; i++) {
+      const c = item.name.charCodeAt(i);
+      const w = c > 0x7F ? 2 : 1;
+      if (displayLen + w > 18) { displayName += '~'; break; }
+      displayName += item.name[i];
+      displayLen += w;
+    }
     const qty = String(item.stock);
-    const pad = Math.max(1, 31 - shortName.length - qty.length);
-    lines.push(shortName + ' '.repeat(pad) + qty + '\n');
+    const pad = Math.max(1, 31 - displayLen - qty.length);
+    pushStr(buf, displayName + ' '.repeat(pad) + qty + '\n');
   });
 
-  lines.push('--------------------------------\n');
-  lines.push('Total: ' + items.length + ' items\n');
-  lines.push('\n\n\n');
-  lines.push('\x1d\x56\x41\x00'); // 自動カット
+  pushStr(buf, '--------------------------------\n');
+  pushStr(buf, `Total: ${items.length} items\n`);
+  p(0x0A, 0x0A, 0x0A);
+  p(0x1D, 0x56, 0x41, 0x00);
 
-  const str = lines.join('');
-  const bytes = [];
-  for (let i = 0; i < str.length; i++) bytes.push(str.charCodeAt(i) & 0xFF);
-  return btoa(String.fromCharCode(...bytes));
+  return btoa(String.fromCharCode(...buf));
 }
 
 // Supabase API呼び出し

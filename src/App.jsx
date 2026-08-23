@@ -16,66 +16,38 @@ const STORES = [
   { id: "maddy",   name: "マディー",          col: "muddy_out",   color: "#be185d", bg: "#fdf2f8", border: "#fbcfe8", icon: "🌸" },
 ];
 
-// ESC/POS印刷データ生成（日本語対応）
+// ESC/POS印刷データ生成（UTF-8でプロキシに送信、プロキシ側でShift-JIS変換）
 function buildEscPos(title, items) {
-  function strToBytes(str) {
-    const bytes = [];
-    for (let i = 0; i < str.length; i++) {
-      const c = str.charCodeAt(i);
-      if (c < 0x80) {
-        bytes.push(c);
-      } else if (c >= 0xFF01 && c <= 0xFF5E) {
-        bytes.push(c - 0xFEE0);
-      } else if (c >= 0xFF61 && c <= 0xFF9F) {
-        bytes.push(c - 0xFF61 + 0xA1);
-      } else {
-        bytes.push(0x3F);
-      }
-    }
-    return bytes;
-  }
-
-  function pushStr(buf, str) {
-    strToBytes(str).forEach(b => buf.push(b));
-  }
-
   const now = new Date();
   const dateStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
-  const buf = [];
-  const p = (...bytes) => bytes.forEach(b => buf.push(b));
-
-  p(0x1B, 0x40);
-  p(0x1B, 0x61, 0x01);
-  pushStr(buf, 'HEAVENS KITCHEN\n');
-  pushStr(buf, title + '\n');
-  pushStr(buf, dateStr + '\n');
-  p(0x1B, 0x61, 0x00);
-  pushStr(buf, '--------------------------------\n');
-  pushStr(buf, 'Name               Stock\n');
-  pushStr(buf, '--------------------------------\n');
+  const ESC = '\x1b', GS = '\x1d';
+  let str = '';
+  str += ESC + '@';           // 初期化
+  str += ESC + 'a\x01';      // センタリング
+  str += 'HEAVENS KITCHEN\n';
+  str += title + '\n';
+  str += dateStr + '\n';
+  str += ESC + 'a\x00';      // 左揃え
+  str += '--------------------------------\n';
+  str += '商品名             在庫\n';
+  str += '--------------------------------\n';
 
   items.forEach(item => {
-    let displayLen = 0;
-    let displayName = '';
-    for (let i = 0; i < item.name.length; i++) {
-      const c = item.name.charCodeAt(i);
-      const w = c > 0x7F ? 2 : 1;
-      if (displayLen + w > 18) { displayName += '~'; break; }
-      displayName += item.name[i];
-      displayLen += w;
-    }
+    const name = item.name.length > 10 ? item.name.slice(0, 9) + '~' : item.name;
     const qty = String(item.stock);
-    const pad = Math.max(1, 31 - displayLen - qty.length);
-    pushStr(buf, displayName + ' '.repeat(pad) + qty + '\n');
+    const spaces = ' '.repeat(Math.max(1, 20 - name.length * 2 - qty.length));
+    str += name + spaces + qty + '\n';
   });
 
-  pushStr(buf, '--------------------------------\n');
-  pushStr(buf, `Total: ${items.length} items\n`);
-  p(0x0A, 0x0A, 0x0A);
-  p(0x1D, 0x56, 0x41, 0x00);
+  str += '--------------------------------\n';
+  str += `合計: ${items.length}種\n`;
+  str += '\n\n\n';
+  str += GS + 'V\x41\x00';  // 自動カット
 
-  return btoa(String.fromCharCode(...buf));
+  // UTF-8バイト列をbase64エンコード
+  const bytes = new TextEncoder().encode(str);
+  return btoa(String.fromCharCode(...bytes));
 }
 
 // Supabase API呼び出し

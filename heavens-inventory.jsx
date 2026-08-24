@@ -26,7 +26,6 @@ function buildEscPos(title, items) {
   let str = '';
   str += ESC + '@';           // 初期化
   str += FS + '\x26';        // 漢字モード開始 (FS &)
-  str += ESC + 't\x13';      // 文字コードページ19=Shift-JIS
   str += ESC + 'a\x01';      // センタリング
   str += 'HEAVENS KITCHEN\n';
   str += title + '\n';

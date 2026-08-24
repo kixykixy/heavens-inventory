@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import Encoding from "encoding-japanese";
 
 const SUPABASE_URL = "https://aghubdcnpcrirngtpiyk.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFnaHViZGNucGNyaXJuZ3RwaXlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU4Mzg1ODIsImV4cCI6MjEwMTQxNDU4Mn0.6Y3Uy6tjY41hLaMwfELLqfHYB1wp46SFuqDhpKFsrcA";
@@ -16,15 +17,15 @@ const STORES = [
   { id: "maddy",   name: "マディー",          col: "muddy_out",   color: "#be185d", bg: "#fdf2f8", border: "#fbcfe8", icon: "🌸" },
 ];
 
-// ESC/POS印刷データ生成（UTF-8でプロキシに送信、プロキシ側でShift-JIS変換）
+// ESC/POS印刷データ生成（Shift-JISに変換してプロキシへ送信）
 function buildEscPos(title, items) {
   const now = new Date();
   const dateStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
-  const ESC = '\x1b', GS = '\x1d';
+  const ESC = '\x1b', GS = '\x1d', FS = '\x1c';
   let str = '';
   str += ESC + '@';           // 初期化
-  str += ESC + 't\x13';      // 文字コードページ19=Shift-JIS
+  str += FS + '\x26';        // 漢字モード開始 (FS &)
   str += ESC + 'a\x01';      // センタリング
   str += 'HEAVENS KITCHEN\n';
   str += title + '\n';
@@ -44,9 +45,13 @@ function buildEscPos(title, items) {
   str += '--------------------------------\n';
   str += `Total: ${items.length} items\n`;
   str += '\n\n\n';
+  str += FS + '\x2e';        // 漢字モード終了 (FS .)
   str += GS + 'V\x41\x00';  // 自動カット
 
-  const bytes = new TextEncoder().encode(str);
+  // Shift-JISへ変換（ESC/POS制御コードは0x7F以下のためそのまま保持される）
+  const unicodeArray = Array.from(str).map(ch => ch.codePointAt(0));
+  const sjisArray = Encoding.convert(unicodeArray, { to: "SJIS", from: "UNICODE" });
+  const bytes = new Uint8Array(sjisArray);
   return btoa(String.fromCharCode(...bytes));
 }
 

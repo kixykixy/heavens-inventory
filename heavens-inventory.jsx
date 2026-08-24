@@ -22,9 +22,10 @@ function buildEscPos(title, items) {
   const now = new Date();
   const dateStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
-  const ESC = '\x1b', GS = '\x1d';
+  const ESC = '\x1b', GS = '\x1d', FS = '\x1c';
   let str = '';
   str += ESC + '@';           // 初期化
+  str += FS + '\x26';        // 漢字モード開始 (FS &)
   str += ESC + 't\x13';      // 文字コードページ19=Shift-JIS
   str += ESC + 'a\x01';      // センタリング
   str += 'HEAVENS KITCHEN\n';
@@ -45,6 +46,7 @@ function buildEscPos(title, items) {
   str += '--------------------------------\n';
   str += `Total: ${items.length} items\n`;
   str += '\n\n\n';
+  str += FS + '\x2e';        // 漢字モード終了 (FS .)
   str += GS + 'V\x41\x00';  // 自動カット
 
   // Shift-JISへ変換（ESC/POS制御コードは0x7F以下のためそのまま保持される）

@@ -23,12 +23,14 @@ function buildEscPos(title, items) {
   const dateStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
   const ESC = '\x1b', GS = '\x1d', FS = '\x1c';
+  const KANJI_ON = FS + '\x26';   // 漢字モード開始 (FS &)
+  const KANJI_OFF = FS + '\x2e';  // 漢字モード終了 (FS .)
+
   let str = '';
   str += ESC + '@';           // 初期化
-  str += FS + '\x26';        // 漢字モード開始 (FS &)
   str += ESC + 'a\x01';      // センタリング
   str += 'HEAVENS KITCHEN\n';
-  str += title + '\n';
+  str += KANJI_ON + title + KANJI_OFF + '\n';
   str += dateStr + '\n';
   str += ESC + 'a\x00';      // 左揃え
   str += '--------------------------------\n';
@@ -39,13 +41,12 @@ function buildEscPos(title, items) {
     const name = item.name.length > 18 ? item.name.slice(0, 17) + '~' : item.name;
     const qty = String(item.stock);
     const pad = Math.max(1, 31 - name.length - qty.length);
-    str += name + ' '.repeat(pad) + qty + '\n';
+    str += KANJI_ON + name + KANJI_OFF + ' '.repeat(pad) + qty + '\n';
   });
 
   str += '--------------------------------\n';
   str += `Total: ${items.length} items\n`;
   str += '\n\n\n';
-  str += FS + '\x2e';        // 漢字モード終了 (FS .)
   str += GS + 'V\x41\x00';  // 自動カット
 
   // Shift-JISへ変換（ESC/POS制御コードは0x7F以下のためそのまま保持される）

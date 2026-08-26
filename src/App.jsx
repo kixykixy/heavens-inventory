@@ -26,11 +26,28 @@ function buildEscPos(title, items) {
   const KANJI_ON = FS + '\x26';   // 漢字モード開始 (FS &)
   const KANJI_OFF = FS + '\x2e';  // 漢字モード終了 (FS .)
 
+  // 文字列をShift-JISバイト列に変換するヘルパー
+  const toSjisBytes = (s) => {
+    const unicodeArray = Array.from(s).map(ch => ch.codePointAt(0));
+    const sjisArray = Encoding.convert(unicodeArray, { to: "SJIS", from: "UNICODE" });
+    return new Uint8Array(sjisArray);
+  };
+
+  // 漢字モード区間は2バイト単位で読まれるため、奇数バイトだと
+  // 終了コマンド(FS .)自体が文字データとして飲み込まれ、
+  // それ以降が延々と誤読され続ける。奇数の場合は半角スペースを
+  // 1つ補って必ず偶数バイトに揃える。
+  const kanjiSegment = (text) => {
+    const bytes = toSjisBytes(text);
+    const padded = bytes.length % 2 === 0 ? text : text + ' ';
+    return KANJI_ON + padded + KANJI_OFF;
+  };
+
   let str = '';
   str += ESC + '@';           // 初期化
   str += ESC + 'a\x01';      // センタリング
   str += 'HEAVENS KITCHEN\n';
-  str += KANJI_ON + title + KANJI_OFF + '\n';
+  str += kanjiSegment(title) + '\n';
   str += dateStr + '\n';
   str += ESC + 'a\x00';      // 左揃え
   str += '--------------------------------\n';
@@ -41,7 +58,7 @@ function buildEscPos(title, items) {
     const name = item.name.length > 18 ? item.name.slice(0, 17) + '~' : item.name;
     const qty = String(item.stock);
     const pad = Math.max(1, 31 - name.length - qty.length);
-    str += KANJI_ON + name + KANJI_OFF + ' '.repeat(pad) + qty + '\n';
+    str += kanjiSegment(name) + ' '.repeat(pad) + qty + '\n';
   });
 
   str += '--------------------------------\n';
@@ -50,9 +67,7 @@ function buildEscPos(title, items) {
   str += GS + 'V\x41\x00';  // 自動カット
 
   // Shift-JISへ変換（ESC/POS制御コードは0x7F以下のためそのまま保持される）
-  const unicodeArray = Array.from(str).map(ch => ch.codePointAt(0));
-  const sjisArray = Encoding.convert(unicodeArray, { to: "SJIS", from: "UNICODE" });
-  const bytes = new Uint8Array(sjisArray);
+  const bytes = toSjisBytes(str);
   return btoa(String.fromCharCode(...bytes));
 }
 

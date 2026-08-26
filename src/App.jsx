@@ -17,60 +17,208 @@ const STORES = [
   { id: "maddy",   name: "マディー",          col: "muddy_out",   color: "#be185d", bg: "#fdf2f8", border: "#fbcfe8", icon: "🌸" },
 ];
 
+// ---- ESC/POS 共通ヘルパー ----
+// 文字サイズ変更や画像印刷を安全に扱うため、文字列を最後に一括変換するのではなく
+// バイト配列(Uint8Array)を組み立てて連結する方式にしている。
+// 画像の生バイトはUnicode文字ではないため、Shift-JIS変換にかけると壊れてしまう。
+// そのため「ASCII制御コード」「日本語テキスト」「画像などの生バイト」を
+// それぞれ別ルートでバイト列化してから結合する。
+
+const ESC = '\x1b', GS = '\x1d', FS = '\x1c';
+
+// ASCII文字列（0x00〜0x7Fのみを想定）をそのままバイト列に変換
+function asciiBytes(str) {
+  return new Uint8Array(Array.from(str).map(ch => ch.charCodeAt(0)));
+}
+
+// Unicode文字列をShift-JISバイト列に変換
+function toSjisBytes(str) {
+  const unicodeArray = Array.from(str).map(ch => ch.codePointAt(0));
+  const sjisArray = Encoding.convert(unicodeArray, { to: "SJIS", from: "UNICODE" });
+  return new Uint8Array(sjisArray);
+}
+
+// 複数のUint8Arrayを1本に結合する
+function concatBytes(arrays) {
+  const total = arrays.reduce((sum, a) => sum + a.length, 0);
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const a of arrays) { result.set(a, offset); offset += a.length; }
+  return result;
+}
+
+// 日本語テキストを漢字モード(FS & 〜 FS .)で囲んだバイト列を生成する。
+// 漢字モードは2バイト単位で読まれるため、奇数バイトだと終了コマンド自体が
+// 文字データとして飲み込まれてしまう。奇数の場合は半角スペース(0x20)を
+// 1バイト補い、必ず偶数バイトに揃えてから終了コマンドを送る。
+function kanjiBytes(text) {
+  const body = toSjisBytes(text);
+  const padded = body.length % 2 === 0 ? body : concatBytes([body, new Uint8Array([0x20])]);
+  return concatBytes([
+    new Uint8Array([0x1c, 0x26]), // FS &
+    padded,
+    new Uint8Array([0x1c, 0x2e]), // FS .
+  ]);
+}
+
+// 全角文字（漢字・ひらがな・全角カタカナ等）は半角の2倍の表示幅になる。
+// 半角文字（ASCII・半角カタカナ）は1、それ以外は2として幅を計算する。
+function getDisplayWidth(str) {
+  let width = 0;
+  for (const ch of str) {
+    const code = ch.codePointAt(0);
+    const isHalfWidth =
+      (code >= 0x00 && code <= 0xff) ||           // ASCII / Latin-1
+      (code >= 0xff61 && code <= 0xff9f);          // 半角カタカナ
+    width += isHalfWidth ? 1 : 2;
+  }
+  return width;
+}
+
+// 表示幅ベースで文字列を切り詰め、はみ出す場合は末尾に "~" を付与する
+function truncateByWidth(str, maxWidth) {
+  let width = 0, result = '';
+  for (const ch of str) {
+    const chWidth = getDisplayWidth(ch);
+    if (width + chWidth > maxWidth) return result + '~';
+    result += ch;
+    width += chWidth;
+  }
+  return result;
+}
+
+// バイト列をbase64文字列に変換（print-proxyへ送る形式）
+function bytesToBase64(bytes) {
+  return btoa(String.fromCharCode(...bytes));
+}
+
+// Canvas(2D)の内容を白黒2値化し、ESC/POSのビットイメージ印刷コマンド(GS v 0)に変換する。
+// 将来、店舗ロゴやイラストを印刷したい場合は、任意の画像をCanvasに描画してから
+// この関数に渡せばよい。
+function canvasToRasterBytes(canvas) {
+  const ctx = canvas.getContext('2d');
+  const { width, height } = canvas;
+  const imgData = ctx.getImageData(0, 0, width, height).data;
+  const bytesPerRow = Math.ceil(width / 8);
+  const raster = new Uint8Array(bytesPerRow * height);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      const lum = 0.299 * imgData[i] + 0.587 * imgData[i + 1] + 0.114 * imgData[i + 2];
+      const alpha = imgData[i + 3];
+      if (alpha > 128 && lum < 128) {
+        raster[y * bytesPerRow + (x >> 3)] |= (0x80 >> (x % 8));
+      }
+    }
+  }
+
+  const xL = bytesPerRow & 0xff, xH = (bytesPerRow >> 8) & 0xff;
+  const yL = height & 0xff, yH = (height >> 8) & 0xff;
+  return concatBytes([
+    new Uint8Array([0x1d, 0x76, 0x30, 0x00, xL, xH, yL, yH]), // GS v 0
+    raster,
+  ]);
+}
+
 // ESC/POS印刷データ生成（Shift-JISに変換してプロキシへ送信）
 function buildEscPos(title, items) {
   const now = new Date();
   const dateStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
-  const ESC = '\x1b', GS = '\x1d', FS = '\x1c';
-  const SELECT_SJIS = FS + 'C\x01';  // 漢字コード体系をShift-JISに選択 (FS C 1)
-  const KANJI_ON = FS + '\x26';   // 漢字モード開始 (FS &)
-  const KANJI_OFF = FS + '\x2e';  // 漢字モード終了 (FS .)
+  const PRINT_WIDTH = 32;     // 区切り線の桁数と合わせる
+  const CHECKBOX = ' [ ]';    // 作業用チェックボックス（半角固定、幅5）
 
-  // 文字列をShift-JISバイト列に変換するヘルパー
-  const toSjisBytes = (s) => {
-    const unicodeArray = Array.from(s).map(ch => ch.codePointAt(0));
-    const sjisArray = Encoding.convert(unicodeArray, { to: "SJIS", from: "UNICODE" });
-    return new Uint8Array(sjisArray);
-  };
-
-  // 漢字モード区間は2バイト単位で読まれるため、奇数バイトだと
-  // 終了コマンド(FS .)自体が文字データとして飲み込まれ、
-  // それ以降が延々と誤読され続ける。奇数の場合は半角スペースを
-  // 1つ補って必ず偶数バイトに揃える。
-  const kanjiSegment = (text) => {
-    const bytes = toSjisBytes(text);
-    const padded = bytes.length % 2 === 0 ? text : text + ' ';
-    return KANJI_ON + padded + KANJI_OFF;
-  };
-
-  let str = '';
-  str += ESC + '@';           // 初期化
-  str += SELECT_SJIS;         // 漢字コード体系をShift-JISに選択
-  str += ESC + 'a\x01';      // センタリング
-  str += 'HEAVENS KITCHEN\n';
-  str += kanjiSegment(title) + '\n';
-  str += dateStr + '\n';
-  str += ESC + 'a\x00';      // 左揃え
-  str += '--------------------------------\n';
-  str += 'Name               Stock\n';
-  str += '--------------------------------\n';
+  const parts = [];
+  parts.push(asciiBytes(ESC + '@'));            // 初期化
+  parts.push(asciiBytes(FS + 'C\x01'));         // 漢字コード体系をShift-JISに選択 (FS C 1)
+  parts.push(asciiBytes(ESC + 'a\x01'));        // センタリング
+  parts.push(asciiBytes('HEAVENS KITCHEN\n'));
+  parts.push(kanjiBytes(title));
+  parts.push(asciiBytes('\n' + dateStr + '\n'));
+  parts.push(asciiBytes(ESC + 'a\x00'));        // 左揃え
+  parts.push(asciiBytes('--------------------------------\n'));
+  parts.push(asciiBytes('Name               Stock  Chk\n'));
+  parts.push(asciiBytes('--------------------------------\n'));
 
   items.forEach(item => {
-    const name = item.name.length > 18 ? item.name.slice(0, 17) + '~' : item.name;
     const qty = String(item.stock);
-    const pad = Math.max(1, 31 - name.length - qty.length);
-    str += kanjiSegment(name) + ' '.repeat(pad) + qty + '\n';
+    const qtyWidth = getDisplayWidth(qty);
+    // 名前 + 半角スペース1 + 数量 + チェックボックス(幅5) が印字幅に収まるよう切り詰め
+    const maxNameWidth = PRINT_WIDTH - qtyWidth - 1 - CHECKBOX.length;
+    const name = truncateByWidth(item.name, maxNameWidth);
+    const nameWidth = getDisplayWidth(name);
+    const pad = Math.max(1, PRINT_WIDTH - CHECKBOX.length - nameWidth - qtyWidth);
+    parts.push(kanjiBytes(name));
+    parts.push(asciiBytes(' '.repeat(pad) + qty + CHECKBOX + '\n'));
   });
 
-  str += '--------------------------------\n';
-  str += `Total: ${items.length} items\n`;
-  str += '\n\n\n';
-  str += GS + 'V\x41\x00';  // 自動カット
+  parts.push(asciiBytes('--------------------------------\n'));
+  parts.push(asciiBytes(`Total: ${items.length} items\n\n\n\n`));
+  parts.push(new Uint8Array([0x1d, 0x56, 0x41, 0x00])); // GS V A 0 自動カット
 
-  // Shift-JISへ変換（ESC/POS制御コードは0x7F以下のためそのまま保持される）
-  const bytes = toSjisBytes(str);
-  return btoa(String.fromCharCode(...bytes));
+  return bytesToBase64(concatBytes(parts));
+}
+
+// 文字サイズ変更・画像印刷の動作確認用テストレシートを生成する。
+// 本番のオーダーメニュー機能を作る前に、このプリンター(CT-S255)で
+// サイズ変更や画像印刷が正しく動くかをまず確認するためのもの。
+// canvasToRasterBytes()に渡す画像は、実際のロゴに差し替え可能。
+function buildGraphicsTestReceipt() {
+  // 58mm紙 = 384ドット幅が一般的。80mm紙の場合は576に変更してください。
+  const PRINTER_WIDTH_DOTS = 384;
+
+  // テスト用の画像をCanvasで生成（本番では店舗ロゴ画像をここに描画する）
+  const canvas = document.createElement('canvas');
+  canvas.width = PRINTER_WIDTH_DOTS;
+  canvas.height = 120;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#000';
+  ctx.font = 'bold 40px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('HEAVENS', canvas.width / 2, canvas.height / 2 - 15);
+  ctx.beginPath();
+  ctx.arc(canvas.width / 2, canvas.height - 20, 14, 0, Math.PI * 2);
+  ctx.fill();
+
+  const parts = [];
+  parts.push(asciiBytes(ESC + '@'));
+  parts.push(asciiBytes(FS + 'C\x01'));
+  parts.push(asciiBytes(ESC + 'a\x01')); // センタリング
+
+  // 画像（テスト用ロゴ）印刷
+  parts.push(canvasToRasterBytes(canvas));
+  parts.push(asciiBytes('\n'));
+
+  // 通常サイズ
+  parts.push(new Uint8Array([0x1d, 0x21, 0x00])); // GS ! 0
+  parts.push(kanjiBytes('通常サイズ'));
+  parts.push(asciiBytes('\n'));
+
+  // 横2倍
+  parts.push(new Uint8Array([0x1d, 0x21, 0x10])); // GS ! 16
+  parts.push(kanjiBytes('横2倍サイズ'));
+  parts.push(asciiBytes('\n'));
+
+  // 縦2倍
+  parts.push(new Uint8Array([0x1d, 0x21, 0x01])); // GS ! 1
+  parts.push(kanjiBytes('縦2倍サイズ'));
+  parts.push(asciiBytes('\n'));
+
+  // 縦横2倍
+  parts.push(new Uint8Array([0x1d, 0x21, 0x11])); // GS ! 17
+  parts.push(kanjiBytes('縦横2倍サイズ'));
+  parts.push(asciiBytes('\n'));
+
+  // 元のサイズに戻してから紙送り・カット
+  parts.push(new Uint8Array([0x1d, 0x21, 0x00]));
+  parts.push(asciiBytes('\n\n\n'));
+  parts.push(new Uint8Array([0x1d, 0x56, 0x41, 0x00])); // 自動カット
+
+  return bytesToBase64(concatBytes(parts));
 }
 
 // Supabase API呼び出し
@@ -487,6 +635,30 @@ export default function App() {
     }
   };
 
+  // 文字サイズ変更・画像印刷が正しく動くか確認するためのテスト印刷
+  const handleGraphicsTest = async () => {
+    setModal(null);
+    setSyncStatus("saving");
+    try {
+      const data = buildGraphicsTestReceipt();
+      const res = await fetch(printerProxy, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip: printerIp, port: printerPort, data }),
+      });
+      const result = await res.json();
+      if (result.success) {
+        alert('テスト印刷しました！');
+      } else {
+        alert('印刷エラー: ' + result.error);
+      }
+    } catch(e) {
+      alert('プリンターに接続できませんでした: ' + e.message);
+    } finally {
+      setSyncStatus("synced");
+    }
+  };
+
   const handleImport = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -651,6 +823,7 @@ export default function App() {
             <button onClick={() => { setModal(null); setTimeout(() => fileRef.current.click(), 50); }} style={{ width: "100%", padding: "12px", background: "#f0fdf4", border: "1.5px solid #bbf7d0", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#15803d", fontSize: 14, textAlign: "left" }}>📥 CSVインポート</button>
             <button onClick={() => { setModal(null); setTimeout(handleExport, 50); }} style={{ width: "100%", padding: "12px", background: "#f0fdf4", border: "1.5px solid #bbf7d0", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#15803d", fontSize: 14, textAlign: "left" }}>📤 CSVエクスポート</button>
             <button onClick={handlePrint} style={{ width: "100%", padding: "12px", background: "#f0f9ff", border: "1.5px solid #bae6fd", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#0369a1", fontSize: 14, textAlign: "left" }}>🖨️ 印刷（{locFilter || 'すべて'}）</button>
+            <button onClick={handleGraphicsTest} style={{ width: "100%", padding: "12px", background: "#faf5ff", border: "1.5px solid #e9d5ff", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#7e22ce", fontSize: 14, textAlign: "left" }}>🖼️ サイズ・画像テスト印刷</button>
             <button onClick={() => setModal({ type: "printerSettings" })} style={{ width: "100%", padding: "12px", background: "#f8fafc", border: "1.5px solid #e2e8f0", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#475569", fontSize: 14, textAlign: "left" }}>⚙️ プリンター設定</button>
             <button onClick={() => setModal({ type: "resetConfirm" })} style={{ width: "100%", padding: "12px", background: "#fff7ed", border: "1.5px solid #fed7aa", borderRadius: 8, cursor: "pointer", fontWeight: 700, color: "#c2410c", fontSize: 14, textAlign: "left" }}>🔄 月次リセット</button>
           </div>

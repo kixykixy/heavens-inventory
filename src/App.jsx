@@ -23,6 +23,7 @@ function buildEscPos(title, items) {
   const dateStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
   const ESC = '\x1b', GS = '\x1d', FS = '\x1c';
+  const SELECT_SJIS = FS + 'C\x01';  // 漢字コード体系をShift-JISに選択 (FS C 1)
   const KANJI_ON = FS + '\x26';   // 漢字モード開始 (FS &)
   const KANJI_OFF = FS + '\x2e';  // 漢字モード終了 (FS .)
 
@@ -45,6 +46,7 @@ function buildEscPos(title, items) {
 
   let str = '';
   str += ESC + '@';           // 初期化
+  str += SELECT_SJIS;         // 漢字コード体系をShift-JISに選択
   str += ESC + 'a\x01';      // センタリング
   str += 'HEAVENS KITCHEN\n';
   str += kanjiSegment(title) + '\n';

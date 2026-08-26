@@ -24,7 +24,7 @@ const STORES = [
 // そのため「ASCII制御コード」「日本語テキスト」「画像などの生バイト」を
 // それぞれ別ルートでバイト列化してから結合する。
 
-const ESC = '\x1b', GS = '\x1d', FS = '\x1c';
+const ESC = '\x1b', FS = '\x1c';
 
 // ASCII文字列（0x00〜0x7Fのみを想定）をそのままバイト列に変換
 function asciiBytes(str) {
